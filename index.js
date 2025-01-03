@@ -58,6 +58,7 @@ async function run() {
     const db = client.db("plantNet-practice");
     const usersCollection = db.collection("users");
     const plantsCollection = db.collection("plants");
+    const ordersCollection = db.collection("orders");
 
     // Generate jwt token
     app.post("/jwt", async (req, res) => {
@@ -118,6 +119,77 @@ async function run() {
     //get all plants
     app.get("/plants", async (req, res) => {
       const result = await plantsCollection.find().limit(20).toArray();
+      res.send(result);
+    });
+
+    // get a plant by id
+    app.get("/plants/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await plantsCollection.findOne(query);
+      res.send(result);
+    });
+
+    //manage plant quantity
+    app.patch("/plants/quantity/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const { quantityToUpdate } = req.body;
+      const filter = { _id: new ObjectId(id) };
+      let updateDoc = {
+        $inc: { quantity: -quantityToUpdate },
+      };
+      const result = await plantsCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
+
+    //save order data in db
+    app.post("/order", verifyToken, async (req, res) => {
+      const orderInfo = req.body;
+      const result = await ordersCollection.insertOne(orderInfo);
+      res.send(result);
+    });
+
+    //get all orders in specific user  order data
+    app.get("/customer-orders/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const result = await ordersCollection
+        .aggregate([
+          {
+            $match: { "customer.email": email }, //match specific customers data only by email
+          },
+          {
+            $addFields: {
+              plantId: { $toObjectId: "$plantId" }, //convert plant id string field to objectId field
+            },
+          },
+          {
+            $lookup: {
+              //go to a different collection and look for data
+              from: "plants", // collection name
+              localField: "plantId", // local data that you want to match
+              foreignField: "_id", //foreign field name of that you want to match
+              as: "plants", // return data as plants array (array naming)
+            },
+          },
+          {
+            $unwind: "$plants", //unwind lookup result, return without array
+          },
+          {
+            $addFields: {
+              // add this fields in order object
+              name: "$plants.name",
+              image: "$plants.imageUrl",
+              category: "$plants.category",
+            },
+          },
+          {
+            //remove the plants object property from the order object
+            $project: {
+              plants: 0,
+            },
+          },
+        ])
+        .toArray();
       res.send(result);
     });
 

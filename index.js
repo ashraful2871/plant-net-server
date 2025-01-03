@@ -193,6 +193,18 @@ async function run() {
       res.send(result);
     });
 
+    //cancel/delete order
+    app.delete("/order/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const order = await ordersCollection.findOne(query);
+      if (order.status === "Delivered") {
+        res.status(409).send("Can't cancel once the product is delivered");
+      }
+      const result = await ordersCollection.deleteOne(query);
+      res.send(result);
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(

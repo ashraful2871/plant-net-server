@@ -109,6 +109,33 @@ async function run() {
       res.send(result);
     });
 
+    //manage user role
+    app.patch("/users/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email };
+      const user = await usersCollection.findOne(query);
+      if (!user || user?.status === "requested") {
+        return res
+          .status(400)
+          .send("you have already requested, wait some time");
+      }
+
+      const updateDoc = {
+        $set: {
+          status: "requested",
+        },
+      };
+      const result = await usersCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    //get all user
+    app.get("/users/role/:email", async (req, res) => {
+      const email = req.params.email;
+      const result = await usersCollection.findOne({ email });
+      res.send({ role: result?.role });
+    });
+
     //save a plant data in db
     app.post("/plants", verifyToken, async (req, res) => {
       const plant = req.body;
@@ -133,11 +160,17 @@ async function run() {
     //manage plant quantity
     app.patch("/plants/quantity/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
-      const { quantityToUpdate } = req.body;
+      const { quantityToUpdate, status } = req.body;
       const filter = { _id: new ObjectId(id) };
       let updateDoc = {
         $inc: { quantity: -quantityToUpdate },
       };
+
+      if (status === "increase") {
+        updateDoc = {
+          $inc: { quantity: quantityToUpdate },
+        };
+      }
       const result = await plantsCollection.updateOne(filter, updateDoc);
       res.send(result);
     });
@@ -199,7 +232,9 @@ async function run() {
       const query = { _id: new ObjectId(id) };
       const order = await ordersCollection.findOne(query);
       if (order.status === "Delivered") {
-        res.status(409).send("Can't cancel once the product is delivered");
+        return res
+          .status(409)
+          .send("Can't cancel once the product is delivered");
       }
       const result = await ordersCollection.deleteOne(query);
       res.send(result);

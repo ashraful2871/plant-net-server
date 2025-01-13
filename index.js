@@ -366,6 +366,73 @@ async function run() {
       res.send(result);
     });
 
+    //admin stat
+    app.get("/admin-stat", verifyToken, verifyAdmin, async (req, res) => {
+      const totalUser = await usersCollection.countDocuments();
+      const totalPlants = await plantsCollection.estimatedDocumentCount();
+      const allOrder = await ordersCollection.find().toArray();
+      // const totalOrder = allOrder.length;
+      // const totalPrice = allOrder.reduce((sum, order) => sum + order.price, 0);
+
+      // generate chart data
+      // const myData = {
+      //   date: "01/20/2026",
+      //   quantity: 12,
+      //   price: 1500,
+      //   orders: 3,
+      // };
+      const chartData = await ordersCollection
+        .aggregate([
+          { $sort: { _id: -1 } },
+          {
+            $addFields: {
+              _id: {
+                $dateToString: {
+                  format: "%Y-%m-%d",
+                  date: { $toDate: "$_id" },
+                },
+              },
+              quantity: {
+                $sum: "$quantity",
+              },
+
+              order: { $sum: 1 },
+            },
+          },
+
+          {
+            $project: {
+              _id: 0,
+              date: "$_id",
+              quantity: 1,
+              order: 1,
+              price: 1,
+            },
+          },
+        ])
+        .toArray();
+
+      //get total revenue ,total order
+      const ordersDetails = await ordersCollection
+        .aggregate([
+          {
+            $group: {
+              _id: null,
+              totalRevenue: { $sum: "$price" },
+              totalOrder: { $sum: 1 },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+            },
+          },
+        ])
+        .next();
+
+      res.send({ totalPlants, totalUser, ...ordersDetails, chartData });
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(

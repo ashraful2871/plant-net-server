@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const stripe = require("stripe")(process.env.PAYMENT_SECRET_KEY);
 const cookieParser = require("cookie-parser");
 const {
   MongoClient,
@@ -431,6 +432,27 @@ async function run() {
         .next();
 
       res.send({ totalPlants, totalUser, ...ordersDetails, chartData });
+    });
+
+    //create payment intent
+    app.post("/create-payment-intent", verifyToken, async (req, res) => {
+      const { quantity, plantId } = req.body;
+      const plant = await plantsCollection.findOne({
+        _id: new ObjectId(plantId),
+      });
+      if (!plant) {
+        return res.status(400).send({ message: "plant not Found" });
+      }
+      const totalPrice = quantity * plant.price * 100; //total price in sent
+      const { client_secret } = await stripe.paymentIntents.create({
+        amount: totalPrice,
+        currency: "usd",
+        automatic_payment_methods: {
+          enabled: true,
+        },
+      });
+      // console.log(paymentIntent);
+      res.send({ clientSecret: client_secret });
     });
 
     // Send a ping to confirm a successful connection
